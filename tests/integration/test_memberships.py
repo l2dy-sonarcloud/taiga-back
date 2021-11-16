@@ -180,6 +180,7 @@ def test_api_create_bulk_members_invalid_user_id(client):
     assert "bulk_memberships" in response.data
     assert "username" in response.data["bulk_memberships"][1]
 
+
 def test_api_create_bulk_members_with_invalid_roles(client):
     project = f.ProjectFactory()
     john = f.UserFactory.create()
@@ -277,11 +278,16 @@ def test_api_create_bulk_members_with_unallowed_domains(client, settings):
     assert "username" in response.data["bulk_memberships"][1]
 
 
+# Number of member and project restriction
+
 def test_api_create_bulk_members_without_enough_memberships_private_project_slots_one_project(client):
     user = f.UserFactory.create(max_memberships_private_projects=3)
     project = f.ProjectFactory(owner=user, is_private=True)
     role = f.RoleFactory(project=project, name="Test")
     f.MembershipFactory(project=project, user=user, is_admin=True)
+
+    project2 = f.ProjectFactory(owner=user, is_private=True)
+    f.MembershipFactory(project=project2)
 
     url = reverse("memberships-bulk-create")
 
@@ -290,8 +296,6 @@ def test_api_create_bulk_members_without_enough_memberships_private_project_slot
         "bulk_memberships": [
             {"role_id": role.pk, "username": "test1@test.com"},
             {"role_id": role.pk, "username": "test2@test.com"},
-            {"role_id": role.pk, "username": "test3@test.com"},
-            {"role_id": role.pk, "username": "test4@test.com"},
         ]
     }
     client.login(user)
@@ -301,13 +305,15 @@ def test_api_create_bulk_members_without_enough_memberships_private_project_slot
     assert "reached your current limit of memberships for private" in response.data["_error_message"]
 
 
-
 def test_api_create_bulk_members_for_admin_without_enough_memberships_private_project_slots_one_project(client):
-    owner = f.UserFactory.create(max_memberships_private_projects=3)
+    owner = f.UserFactory.create(max_memberships_private_projects=4)
     user = f.UserFactory.create()
     project = f.ProjectFactory(owner=owner, is_private=True)
     role = f.RoleFactory(project=project, name="Test")
     f.MembershipFactory(project=project, user=user, is_admin=True)
+
+    project2 = f.ProjectFactory(owner=owner, is_private=True)
+    f.MembershipFactory(project=project2)
 
     url = reverse("memberships-bulk-create")
 
@@ -315,8 +321,6 @@ def test_api_create_bulk_members_for_admin_without_enough_memberships_private_pr
         "project_id": project.id,
         "bulk_memberships": [
             {"role_id": role.pk, "username": "test1@test.com"},
-            {"role_id": role.pk, "username": "test2@test.com"},
-            {"role_id": role.pk, "username": "test3@test.com"},
             {"role_id": role.pk, "username": "test4@test.com"},
         ]
     }
@@ -338,7 +342,6 @@ def test_api_create_bulk_members_with_enough_memberships_private_project_slots_m
     f.MembershipFactory.create(project=other_project)
     f.MembershipFactory.create(project=other_project)
     f.MembershipFactory.create(project=other_project)
-    f.MembershipFactory.create(project=other_project)
 
     url = reverse("memberships-bulk-create")
 
@@ -347,8 +350,6 @@ def test_api_create_bulk_members_with_enough_memberships_private_project_slots_m
         "bulk_memberships": [
             {"role_id": role.pk, "username": "test1@test.com"},
             {"role_id": role.pk, "username": "test2@test.com"},
-            {"role_id": role.pk, "username": "test3@test.com"},
-            {"role_id": role.pk, "username": "test4@test.com"},
         ]
     }
     client.login(user)
@@ -363,6 +364,9 @@ def test_api_create_bulk_members_without_enough_memberships_public_project_slots
     role = f.RoleFactory(project=project, name="Test")
     f.MembershipFactory(project=project, user=user, is_admin=True)
 
+    project2 = f.ProjectFactory(owner=user, is_private=True)
+    f.MembershipFactory(project=project2)
+
     url = reverse("memberships-bulk-create")
 
     data = {
@@ -370,8 +374,6 @@ def test_api_create_bulk_members_without_enough_memberships_public_project_slots
         "bulk_memberships": [
             {"role_id": role.pk, "username": "test1@test.com"},
             {"role_id": role.pk, "username": "test2@test.com"},
-            {"role_id": role.pk, "username": "test3@test.com"},
-            {"role_id": role.pk, "username": "test4@test.com"},
         ]
     }
     client.login(user)
@@ -390,8 +392,6 @@ def test_api_create_bulk_members_with_enough_memberships_public_project_slots_mu
     other_project = f.ProjectFactory(owner=user)
     f.MembershipFactory.create(project=other_project)
     f.MembershipFactory.create(project=other_project)
-    f.MembershipFactory.create(project=other_project)
-    f.MembershipFactory.create(project=other_project)
 
     url = reverse("memberships-bulk-create")
 
@@ -400,8 +400,6 @@ def test_api_create_bulk_members_with_enough_memberships_public_project_slots_mu
         "bulk_memberships": [
             {"role_id": role.pk, "username": "test1@test.com"},
             {"role_id": role.pk, "username": "test2@test.com"},
-            {"role_id": role.pk, "username": "test3@test.com"},
-            {"role_id": role.pk, "username": "test4@test.com"},
         ]
     }
     client.login(user)
@@ -571,8 +569,6 @@ def test_api_create_membership_with_enough_memberships_private_project_slots_mul
     f.MembershipFactory(project=project, user=user, is_admin=True)
 
     other_project = f.ProjectFactory(owner=user)
-    f.MembershipFactory.create(project=other_project)
-    f.MembershipFactory.create(project=other_project)
     f.MembershipFactory.create(project=other_project)
     f.MembershipFactory.create(project=other_project)
 

@@ -426,13 +426,12 @@ class ProjectViewSet(LikedResourceMixin, HistoryResourceMixin,
         project = self.get_object()
         self.check_permissions(request, "transfer_accept", project)
 
-        (can_transfer, error_message) = services.check_if_project_can_be_transfered(
+        (can_transfer, error_message, total_members) = services.check_if_project_can_be_transfered(
             project,
             request.user,
         )
         if not can_transfer:
-            members = project.memberships.count()
-            raise exc.NotEnoughSlotsForProject(project.is_private, members, error_message)
+            raise exc.NotEnoughSlotsForProject(project.is_private, total_members, error_message)
 
         reason = request.DATA.get('reason', None)
         services.accept_project_transfer(project, request.user, token, reason)
@@ -463,25 +462,29 @@ class ProjectViewSet(LikedResourceMixin, HistoryResourceMixin,
             return response.BadRequest(validator.errors)
 
         data = validator.data
+        new_name = data.get("name", "")
+        new_description = data.get("description", "")
+        new_owner = self.request.user
+        new_is_private = data.get('is_private', False)
+        new_members = data.get("users", [])
 
         # Validate if the project can be imported
-        is_private = data.get('is_private', False)
-        total_memberships = len(data.get("users", [])) + 1
-        (enough_slots, error_message) = users_services.has_available_slot_for_new_project(
-            self.request.user,
-            is_private,
-            total_memberships
+        (enough_slots, error_message, total_members) = services.check_if_project_can_be_duplicate(
+            project=project,
+            new_owner=new_owner,
+            new_is_private=new_is_private,
+            new_user_id_members=[m["id"] for m in new_members]
         )
         if not enough_slots:
-            raise exc.NotEnoughSlotsForProject(is_private, total_memberships, error_message)
+            raise exc.NotEnoughSlotsForProject(new_is_private, total_members, error_message)
 
         new_project = services.duplicate_project(
             project=project,
-            owner=request.user,
-            name=data["name"],
-            description=data["description"],
-            is_private=data["is_private"],
-            users=data["users"]
+            name=new_name,
+            description=new_description,
+            owner=new_owner,
+            is_private=new_is_private,
+            users=new_members
         )
         new_project = get_object_or_error(self.get_queryset(), request.user, id=new_project.id)
         serializer = self.get_serializer(new_project)
@@ -513,10 +516,9 @@ class ProjectViewSet(LikedResourceMixin, HistoryResourceMixin,
         if not obj.id or self.get_object().is_private != obj.is_private:
             # Validate if the owner have enough slots to create the project
             # or if you are changing the privacy
-            (can_create_or_update, error_message) = services.check_if_project_can_be_created_or_updated(obj)
+            (can_create_or_update, error_message, total_members) = services.check_if_project_can_be_created_or_updated(obj)
             if not can_create_or_update:
-                members = max(obj.memberships.count(), 1)
-                raise exc.NotEnoughSlotsForProject(obj.is_private, members, error_message)
+                raise exc.NotEnoughSlotsForProject(obj.is_private, total_members or 1, error_message)
 
         self._set_base_permissions(obj)
         super().pre_save(obj)
